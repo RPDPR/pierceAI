@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: pierceai_db
+    restart: always
+    environment:
+      POSTGRES_USER: bot_user
+      POSTGRES_PASSWORD: bot_password_123
+      POSTGRES_DB: pierceai_bot_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build:
+      context: .
+      dockerfile: _docker/app/Dockerfile
+    container_name: pierceai_app
+    restart: always
+    depends_on:
+      - db
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+
+volumes:
+  pgdata:

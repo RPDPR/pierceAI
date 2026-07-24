@@ -1,0 +1,7 @@
+discord.py
+markovify
+Pillow
+python-dotenv
+asyncpg
+sqlalchemy>=2.0.0
+alembic
