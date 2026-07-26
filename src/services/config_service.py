@@ -1,9 +1,13 @@
 import discord
+import logging
 from datetime import datetime
-from sqlalchemy import delete
+from sqlalchemy import delete, select, func
 from sqlalchemy.dialects.postgresql import insert
 from database import AsyncSessionLocal, ChannelConfig, Message
 import config
+import asyncio
+
+logger = logging.getLogger("pierceAI.config")
 
 class PierceConfigService:
     @staticmethod
@@ -30,49 +34,50 @@ class PierceConfigService:
             await session.commit()
 
     @staticmethod
-    async def sync_and_purge_server_history(guild: discord.Guild, since_date: datetime) -> tuple[int, int]:
-        async with AsyncSessionLocal() as session:
-            delete_stmt = delete(Message).where(
-                Message.guild_id == guild.id,
-                Message.created_at < since_date
-            )
-            result = await session.execute(delete_stmt)
-            deleted_count = result.rowcount
-            await session.commit()
-
-        total_count = 0
-        batch = []
-        for channel in guild.text_channels:
-            perms = channel.permissions_for(guild.me)
-            if not perms.read_messages or not perms.read_message_history:
-                continue
-            try:
-                async for msg in channel.history(after=since_date, oldest_first=False, limit=None):
-                    if msg.author.bot or not msg.content or msg.content.strip() == "g.i":
-                        continue
-                    batch.append({
-                        "id": msg.id,
-                        "channel_id": msg.channel.id,
-                        "guild_id": msg.guild.id,
-                        "author_id": msg.author.id,
-                        "content": msg.content.strip(),
-                        "created_at": msg.created_at.replace(tzinfo=None)
-                    })
-                    if len(batch) >= 200:
-                        async with AsyncSessionLocal() as session:
-                            stmt = insert(Message).values(batch).on_conflict_do_nothing(index_elements=["id"])
-                            await session.execute(stmt)
-                            await session.commit()
-                        total_count += len(batch)
-                        batch = []
-            except discord.Forbidden:
-                continue
-
-        if batch:
+    async def sync_and_purge_server_history_bg(interaction: discord.Interaction, guild: discord.Guild, since_date: datetime):
+        try:
             async with AsyncSessionLocal() as session:
-                stmt = insert(Message).values(batch).on_conflict_do_nothing(index_elements=["id"])
-                await session.execute(stmt)
+                delete_stmt = delete(Message).where(
+                    Message.guild_id == guild.id,
+                    Message.created_at < since_date
+                )
+                await session.execute(delete_stmt)
                 await session.commit()
-            total_count += len(batch)
 
-        return total_count, deleted_count
+            await interaction.edit_original_response(content="✅ History has been synced!")
+
+            batch = []
+            for channel in guild.text_channels:
+                perms = channel.permissions_for(guild.me)
+                if not perms.read_messages or not perms.read_message_history:
+                    continue
+                try:
+                    async for msg in channel.history(after=since_date, oldest_first=False, limit=None):
+                        if msg.author.bot or not msg.content or msg.content.strip() == config.TRIGGER_WORD:
+                            continue
+                        batch.append({
+                            "id": msg.id,
+                            "channel_id": msg.channel.id,
+                            "guild_id": msg.guild.id,
+                            "author_id": msg.author.id,
+                            "content": msg.content.strip(),
+                            "created_at": msg.created_at.replace(tzinfo=None)
+                        })
+                        if len(batch) >= 200:
+                            async with AsyncSessionLocal() as session:
+                                stmt = insert(Message).values(batch).on_conflict_do_nothing(index_elements=["id"])
+                                await session.execute(stmt)
+                                await session.commit()
+                            batch = []
+                            await asyncio.sleep(0.1)
+                except discord.Forbidden:
+                    continue
+
+            if batch:
+                async with AsyncSessionLocal() as session:
+                    stmt = insert(Message).values(batch).on_conflict_do_nothing(index_elements=["id"])
+                    await session.execute(stmt)
+                    await session.commit()
+
+        except Exception as e:
+            logger.error(f"Error during background sync: {e}")

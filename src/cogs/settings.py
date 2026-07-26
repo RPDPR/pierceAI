@@ -2,6 +2,7 @@ import discord
 from datetime import datetime
 from discord import app_commands
 from discord.ext import commands
+import asyncio
 from services.config_service import PierceConfigService
 
 class Settings(commands.Cog):
@@ -26,31 +27,26 @@ class Settings(commands.Cog):
         await PierceConfigService.update_channel_perms(interaction.guild_id, channel.id, allow_read, allow_write, cooldown)
         await interaction.followup.send(f"✅ Settings updated for {channel.mention}!")
 
-    @config_group.command(name="sync_history", description="Sync fresh history and purge completely anything older than specified date")
+    @config_group.command(name="sync_history", description="Sync history in background and purge older messages")
     @app_commands.describe(
-        since_date="Keep messages starting from this date. Everything older will be deleted (Format: YYYY-MM-DD)"
+        since_date="Keep messages starting from this date. Format: YYYY-MM-DD"
     )
     async def sync_history(self, interaction: discord.Interaction, since_date: str):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
             return
 
-        await interaction.response.defer(ephemeral=True)
         try:
             parsed_date = datetime.strptime(since_date.strip(), "%Y-%m-%d")
         except ValueError:
-            await interaction.followup.send("❌ Invalid date format! Please use YYYY-MM-DD (e.g., 2024-01-01).")
+            await interaction.response.send_message("❌ Invalid date format! Use YYYY-MM-DD.", ephemeral=True)
             return
 
-        try:
-            synced, purged = await PierceConfigService.sync_and_purge_server_history(interaction.guild, parsed_date)
-            await interaction.followup.send(
-                f"✅ **Database Sync Complete!**\n"
-                f"🗑️ `Purged:` {purged} obsolete messages older than {since_date}.\n"
-                f"📥 `Synced:` {synced} fresh historical messages."
-            )
-        except Exception as e:
-            await interaction.followup.send(f"❌ Unexpected error during sync: {str(e)}")
+        await interaction.response.defer(ephemeral=True)
+        
+        asyncio.create_task(
+            PierceConfigService.sync_and_purge_server_history_bg(interaction, interaction.guild, parsed_date)
+        )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Settings(bot))
