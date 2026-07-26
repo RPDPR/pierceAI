@@ -47,7 +47,11 @@ class Commands(commands.Cog):
                 if attachment.content_type and attachment.content_type.startswith("image/"):
                     file_ext = attachment.filename.split(".")[-1]
                     filename = f"{attachment.id}.{file_ext}"
-                    file_path = os.path.join(config.IMAGE_POOL_DIR, filename)
+                    
+                    guild_pool_dir = os.path.join(config.IMAGE_POOL_DIR, str(message.guild.id))
+                    os.makedirs(guild_pool_dir, exist_ok=True)
+                    file_path = os.path.join(guild_pool_dir, filename)
+                    
                     async with aiohttp.ClientSession() as web_session:
                         async with web_session.get(attachment.url) as response:
                             if response.status == 200:
@@ -76,7 +80,7 @@ class Commands(commands.Cog):
                 async with message.channel.typing():
                     avatar_bytes = await message.author.display_avatar.read()
                     image_buffer = await PierceGeneratorService.generate_meme(avatar_bytes, message.channel.id, message.guild.id)
-                    file = discord.File(fp=image_buffer, filename="absurdity.jpg")
+                    file = discord.File(fp=image_buffer, filename="meme.jpg")
                     await message.reply(file=file)
             finally:
                 self._is_processing[message.channel.id] = False

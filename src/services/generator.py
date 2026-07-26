@@ -32,14 +32,13 @@ class PierceGeneratorService:
         if len(messages) < 3:
             return "NOT ENOUGH DATA TO GENERATE ABSURDITY YET"
 
-        if random.choice([True, False]):
+        if random.random() < 0.25:
             return random.choice(messages)
 
         text_corpus = "\n".join(messages)
         try:
             text_model = markovify.NewlineText(text_corpus, state_size=1)
             text_model.compile(inplace=True)
-            
             generated_text = text_model.make_short_sentence(
                 max_chars=100, 
                 tries=100, 
@@ -86,18 +85,19 @@ class PierceGeneratorService:
     @staticmethod
     async def generate_meme(user_avatar_bytes: bytes, channel_id: int, guild_id: int) -> BytesIO:
         pool_images = []
-        if os.path.exists(config.IMAGE_POOL_DIR):
-            pool_images = [f for f in os.listdir(config.IMAGE_POOL_DIR) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        guild_pool_dir = os.path.join(config.IMAGE_POOL_DIR, str(guild_id))
         
+        if os.path.exists(guild_pool_dir):
+            pool_images = [f for f in os.listdir(guild_pool_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+
         if pool_images and random.random() < 0.4:
-            bg_path = os.path.join(config.IMAGE_POOL_DIR, random.choice(pool_images))
+            bg_path = os.path.join(guild_pool_dir, random.choice(pool_images))
             base_img = Image.open(bg_path).convert("RGB")
         else:
             base_img = Image.open(BytesIO(user_avatar_bytes)).convert("RGB")
 
         w, h = base_img.size
         draw = ImageDraw.Draw(base_img)
-
         font_size = max(16, int(w * 0.11))
         stroke_w = max(1, int(w * 0.007))
         max_text_w = int(w * 0.95)
@@ -109,8 +109,8 @@ class PierceGeneratorService:
 
         messages = await PierceGeneratorService._fetch_clean_messages(guild_id)
         single_phrase = await PierceGeneratorService._generate_raw_text(messages)
-        
         words = single_phrase.upper().split()
+
         if len(words) > 1:
             mid = len(words) // 2
             top_raw = " ".join(words[:mid])
@@ -128,12 +128,12 @@ class PierceGeneratorService:
                 text_w = bbox[2] - bbox[0]
                 x_pos = int((w - text_w) / 2)
                 draw.multiline_text(
-                    (x_pos, int(h * 0.00)), top_text, fill="white", font=font, 
+                    (x_pos, int(h * 0.00)), top_text, fill="white", font=font,
                     align="center", spacing=2, stroke_width=stroke_w, stroke_fill="black"
                 )
             else:
                 draw.multiline_text(
-                    (int(w * 0.5), int(h * 0.00)), top_text, fill="white", font=font, 
+                    (int(w * 0.5), int(h * 0.00)), top_text, fill="white", font=font,
                     anchor="ma", align="center", spacing=2, stroke_width=stroke_w, stroke_fill="black"
                 )
 
@@ -145,12 +145,12 @@ class PierceGeneratorService:
                 x_pos = int((w - text_w) / 2)
                 y_pos = int(h * 0.98) - text_h
                 draw.multiline_text(
-                    (x_pos, y_pos), bottom_text, fill="white", font=font, 
+                    (x_pos, y_pos), bottom_text, fill="white", font=font,
                     align="center", spacing=2, stroke_width=stroke_w, stroke_fill="black"
                 )
             else:
                 draw.multiline_text(
-                    (int(w * 0.5), int(h * 0.98)), bottom_text, fill="white", font=font, 
+                    (int(w * 0.5), int(h * 0.98)), bottom_text, fill="white", font=font,
                     anchor="mb", align="center", spacing=2, stroke_width=stroke_w, stroke_fill="black"
                 )
 
