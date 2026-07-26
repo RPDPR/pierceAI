@@ -28,14 +28,31 @@ class PierceGeneratorService:
             return list(result.scalars().all())
 
     @staticmethod
-    async def _generate_raw_text(messages: list[str]) -> str:
+    async def _generate_raw_text(messages: list[str], is_meme: bool = False) -> str:
         if len(messages) < 3:
             return "NOT ENOUGH DATA TO GENERATE ABSURDITY YET"
 
-        if random.random() < 0.25:
+        if random.random() < 0.10:
             return random.choice(messages)
 
-        text_corpus = "\n".join(messages)
+        target_messages = messages
+        if is_meme:
+            cleaned_messages = []
+            for msg in messages:
+                cleaned = msg.strip()
+                if not cleaned or "http" in cleaned or "www." in cleaned or "attachments/" in cleaned or "cdn." in cleaned:
+                    continue
+                if ".com" in cleaned or ".ru" in cleaned or ".pl" in cleaned or ".net" in cleaned or ".org" in cleaned:
+                    continue
+                if cleaned.startswith("<@") and cleaned.endswith(">"):
+                    continue
+                cleaned_messages.append(cleaned)
+            target_messages = cleaned_messages
+
+        if len(target_messages) < 3:
+            return random.choice(messages)
+
+        text_corpus = "\n".join(target_messages)
         try:
             text_model = markovify.NewlineText(text_corpus, state_size=1)
             text_model.compile(inplace=True)
@@ -44,9 +61,9 @@ class PierceGeneratorService:
                 tries=100, 
                 test_output=False
             )
-            return generated_text if generated_text else random.choice(messages)
+            return generated_text if generated_text else random.choice(target_messages)
         except Exception:
-            return random.choice(messages)
+            return random.choice(target_messages)
 
     @staticmethod
     async def get_text_for_reply(guild_id: int) -> str:
@@ -108,19 +125,12 @@ class PierceGeneratorService:
             font = ImageFont.load_default()
 
         messages = await PierceGeneratorService._fetch_clean_messages(guild_id)
-        single_phrase = await PierceGeneratorService._generate_raw_text(messages)
-        words = single_phrase.upper().split()
+        
+        top_raw = await PierceGeneratorService._generate_raw_text(messages)
+        bottom_raw = await PierceGeneratorService._generate_raw_text(messages)
 
-        if len(words) > 1:
-            mid = len(words) // 2
-            top_raw = " ".join(words[:mid])
-            bottom_raw = " ".join(words[mid:])
-        else:
-            top_raw = single_phrase.upper()
-            bottom_raw = ""
-
-        top_text = PierceGeneratorService._wrap_text_to_max_lines(top_raw, font, max_width=max_text_w, max_lines=2)
-        bottom_text = PierceGeneratorService._wrap_text_to_max_lines(bottom_raw, font, max_width=max_text_w, max_lines=2)
+        top_text = PierceGeneratorService._wrap_text_to_max_lines(top_raw.upper(), font, max_width=max_text_w, max_lines=2)
+        bottom_text = PierceGeneratorService._wrap_text_to_max_lines(bottom_raw.upper(), font, max_width=max_text_w, max_lines=2)
 
         if top_text:
             if "\n" in top_text:
