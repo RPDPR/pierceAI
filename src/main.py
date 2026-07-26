@@ -4,7 +4,7 @@ import discord
 from discord.ext import commands
 from sqlalchemy import text
 import config
-from database import AsyncSessionLocal, engine
+from database import AsyncSessionLocal, engine, init_models
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("pierceAI")
@@ -18,7 +18,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def load_extensions():
     # Load all our architectural cogs
-    extensions = ["cogs.settings"]
+    extensions = ["cogs.settings", "cogs.events", "cogs.commands"]
     for ext in extensions:
         try:
             await bot.load_extension(ext)
@@ -39,6 +39,14 @@ async def on_ready():
 async def main():
     if not config.DISCORD_TOKEN:
         logger.critical("❌ DISCORD_TOKEN missing!")
+        return
+    
+    logger.info("⏳ Syncing database schemas...")
+    try:
+        await init_models()
+        logger.info("✅ Database schemas synced successfully!")
+    except Exception as e:
+        logger.critical(f"❌ Failed to sync database schemas: {e}")
         return
 
     try:

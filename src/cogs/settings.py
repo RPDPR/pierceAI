@@ -1,87 +1,56 @@
 import discord
+from datetime import datetime
 from discord import app_commands
 from discord.ext import commands
-from sqlalchemy.dialects.postgresql import insert
-from database import AsyncSessionLocal, ChannelConfig
+from services.config_service import PierceConfigService
 
 class Settings(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # Базовая группа команды /config
     config_group = app_commands.Group(name="config", description="Configure pierceAI bot settings")
 
-    @config_group.command(name="channel_perms", description="Configure read/write permissions for a channel")
+    @config_group.command(name="channel_settings", description="Set channel access and cooldown for pierceAI")
     @app_commands.describe(
-        channel="The target channel to configure",
-        allow_read="Can the bot read history from this channel?",
-        allow_write="Can the bot reply/write in this channel?"
+        channel="Target channel to configure",
+        allow_read="Can the bot use this channel's text as a source for generating memes?",
+        allow_write="Can the bot post memes or reply to users in this channel?",
+        cooldown="Cooldown between triggers in seconds (e.g., 5.0)"
     )
-    async def channel_perms(self, interaction: discord.Interaction, channel: discord.TextChannel, allow_read: bool = None, allow_write: bool = None):
-        # Проверка прав администратора (как в Laravel Middleware)
+    async def channel_settings(self, interaction: discord.Interaction, channel: discord.TextChannel, allow_read: bool = None, allow_write: bool = None, cooldown: float = None):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ You need Administrator permissions to use this command.", ephemeral=True)
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
             return
 
-        async with AsyncSessionLocal() as session:
-            # Делаем UPSERT (создать или обновить, если запись уже есть)
-            stmt = insert(ChannelConfig).values(
-                channel_id=channel.id,
-                guild_id=interaction.guild_id,
-                allow_read=allow_read if allow_read is not None else True,
-                allow_write=allow_write if allow_write is not None else True
-            )
-            
-            update_dict = {}
-            if allow_read is not None: update_dict["allow_read"] = allow_read
-            if allow_write is not None: update_dict["allow_write"] = allow_write
-            
-            if update_dict:
-                stmt = stmt.on_conflict_do_update(index_elements=["channel_id"], set_=update_dict)
-            
-            await session.execute(stmt)
-            await session.commit()
+        await interaction.response.defer(ephemeral=True)
+        await PierceConfigService.update_channel_perms(interaction.guild_id, channel.id, allow_read, allow_write, cooldown)
+        await interaction.followup.send(f"✅ Settings updated for {channel.mention}!")
 
-        await interaction.response.send_message(f"✅ Successfully updated permissions for {channel.mention}!", ephemeral=True)
-
-    @config_group.command(name="behavior", description="Configure cooldown and text limits")
+    @config_group.command(name="sync_history", description="Sync fresh history and purge completely anything older than specified date")
     @app_commands.describe(
-        channel="The target channel",
-        cooldown="Cooldown between responses in seconds",
-        history_days="Lookback period in days (0 for all-time history)",
-        text_position="Position of text on image (top, bottom, random)"
+        since_date="Keep messages starting from this date. Everything older will be deleted (Format: YYYY-MM-DD)"
     )
-    @app_commands.choices(text_position=[
-        app_commands.Choice(name="Top Only", value="top"),
-        app_commands.Choice(name="Bottom Only", value="bottom"),
-        app_commands.Choice(name="Random", value="random")
-    ])
-    async def behavior(self, interaction: discord.Interaction, channel: discord.TextChannel, cooldown: float = None, history_days: int = None, text_position: str = None):
+    async def sync_history(self, interaction: discord.Interaction, since_date: str):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ You need Administrator permissions to use this command.", ephemeral=True)
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
             return
 
-        async with AsyncSessionLocal() as session:
-            stmt = insert(ChannelConfig).values(
-                channel_id=channel.id,
-                guild_id=interaction.guild_id,
-                cooldown=cooldown if cooldown is not None else 0.0,
-                history_days=history_days if history_days is not None else 30,
-                text_position=text_position if text_position is not None else "random"
-            )
-            
-            update_dict = {}
-            if cooldown is not None: update_dict["cooldown"] = cooldown
-            if history_days is not None: update_dict["history_days"] = history_days
-            if text_position is not None: update_dict["text_position"] = text_position
-            
-            if update_dict:
-                stmt = stmt.on_conflict_do_update(index_elements=["channel_id"], set_=update_dict)
-                
-            await session.execute(stmt)
-            await session.commit()
+        await interaction.response.defer(ephemeral=True)
+        try:
+            parsed_date = datetime.strptime(since_date.strip(), "%Y-%m-%d")
+        except ValueError:
+            await interaction.followup.send("❌ Invalid date format! Please use YYYY-MM-DD (e.g., 2024-01-01).")
+            return
 
-        await interaction.response.send_message(f"✅ Successfully updated behavior settings for {channel.mention}!", ephemeral=True)
+        try:
+            synced, purged = await PierceConfigService.sync_and_purge_server_history(interaction.guild, parsed_date)
+            await interaction.followup.send(
+                f"✅ **Database Sync Complete!**\n"
+                f"🗑️ `Purged:` {purged} obsolete messages older than {since_date}.\n"
+                f"📥 `Synced:` {synced} fresh historical messages."
+            )
+        except Exception as e:
+            await interaction.followup.send(f"❌ Unexpected error during sync: {str(e)}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Settings(bot))

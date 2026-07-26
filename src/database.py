@@ -28,27 +28,10 @@ class ChannelConfig(Base):
 
     channel_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    
-    # Permissions
     allow_read: Mapped[bool] = mapped_column(Boolean, default=True)
     allow_write: Mapped[bool] = mapped_column(Boolean, default=True)
-    
-    # Business logic tweaks
     cooldown: Mapped[float] = mapped_column(Float, default=0.0)
-    history_days: Mapped[int] = mapped_column(Integer, default=30) # 0 means "all time"
-    text_position: Mapped[str] = mapped_column(String(20), default="random")
 
-    sources: Mapped[List["ChannelSource"]] = relationship(back_populates="target_channel", cascade="all, delete-orphan")
-
-class ChannelSource(Base):
-    __tablename__ = "channel_sources"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    target_channel_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("channels_config.channel_id", ondelete="CASCADE"), nullable=False)
-    source_channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    target_channel: Mapped["ChannelConfig"] = relationship(back_populates="sources")
-
-    __table_args__ = (
-        UniqueConstraint("target_channel_id", "source_channel_id", name="uq_target_source"),
-    )
+async def init_models():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
