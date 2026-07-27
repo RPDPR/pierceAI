@@ -14,6 +14,7 @@ class Commands(commands.Cog):
         self.bot = bot
         self._last_triggered = {}
         self._cooldown_cache = {}
+        self._allow_save_images_cache = {}
         self._is_processing = {}
 
     async def _is_write_allowed(self, channel_id: int) -> bool:
@@ -22,7 +23,19 @@ class Commands(commands.Cog):
             if res is None:
                 return False
             self._cooldown_cache[channel_id] = res.cooldown
+            self._allow_save_images_cache[channel_id] = res.allow_save_images
             return res.allow_write
+
+    async def _is_save_images_allowed(self, channel_id: int) -> bool:
+        if channel_id in self._allow_save_images_cache:
+            return self._allow_save_images_cache[channel_id]
+        async with AsyncSessionLocal() as session:
+            res = await session.get(ChannelConfig, channel_id)
+            if res is None:
+                return True
+            self._cooldown_cache[channel_id] = res.cooldown
+            self._allow_save_images_cache[channel_id] = res.allow_save_images
+            return res.allow_save_images
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -43,39 +56,33 @@ class Commands(commands.Cog):
                 await session.commit()
 
         if message.attachments:
-            for attachment in message.attachments:
-                if attachment.content_type and attachment.content_type.startswith("image/"):
-                    file_ext = attachment.filename.split(".")[-1]
-                    filename = f"{attachment.id}.{file_ext}"
-                    
-                    guild_pool_dir = os.path.join(config.IMAGE_POOL_DIR, str(message.guild.id))
-                    os.makedirs(guild_pool_dir, exist_ok=True)
-                    file_path = os.path.join(guild_pool_dir, filename)
-                    
-                    async with aiohttp.ClientSession() as web_session:
-                        async with web_session.get(attachment.url) as response:
-                            if response.status == 200:
-                                async with aiofiles.open(file_path, mode="wb") as f:
-                                    await f.write(await response.read())
+            if await self._is_save_images_allowed(message.channel.id):
+                for attachment in message.attachments:
+                    if attachment.content_type and attachment.content_type.startswith("image/"):
+                        file_ext = attachment.filename.split(".")[-1]
+                        filename = f"{attachment.id}.{file_ext}"
+                        guild_pool_dir = os.path.join(config.IMAGE_POOL_DIR, str(message.guild.id))
+                        os.makedirs(guild_pool_dir, exist_ok=True)
+                        file_path = os.path.join(guild_pool_dir, filename)
+                        async with aiohttp.ClientSession() as web_session:
+                            async with web_session.get(attachment.url) as response:
+                                if response.status == 200:
+                                    async with aiofiles.open(file_path, mode="wb") as f:
+                                        await f.write(await response.read())
 
         if message.content.strip() == config.TRIGGER_WORD:
             if self._is_processing.get(message.channel.id, False):
                 return
-
             now = time.time()
             last_time = self._last_triggered.get(message.channel.id, 0.0)
             cooldown_seconds = self._cooldown_cache.get(message.channel.id, config.DEFAULT_COOLDOWN)
-
             if now - last_time < cooldown_seconds:
                 return
-
             self._is_processing[message.channel.id] = True
             self._last_triggered[message.channel.id] = now
-
             if not await self._is_write_allowed(message.channel.id):
                 self._is_processing[message.channel.id] = False
                 return
-
             try:
                 async with message.channel.typing():
                     avatar_bytes = await message.author.display_avatar.read()

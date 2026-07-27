@@ -30,6 +30,7 @@ class ChannelConfig(Base):
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     allow_read: Mapped[bool] = mapped_column(Boolean, default=True)
     allow_write: Mapped[bool] = mapped_column(Boolean, default=True)
+    allow_save_images: Mapped[bool] = mapped_column(Boolean, default=True)
     cooldown: Mapped[float] = mapped_column(Float, default=0.0)
 
 async def init_models():

@@ -11,13 +11,14 @@ logger = logging.getLogger("pierceAI.config")
 
 class PierceConfigService:
     @staticmethod
-    async def update_channel_perms(guild_id: int, channel_id: int, allow_read: bool = None, allow_write: bool = None, cooldown: float = None):
+    async def update_channel_perms(guild_id: int, channel_id: int, allow_read: bool = None, allow_write: bool = None, allow_save_images: bool = None, cooldown: float = None):
         async with AsyncSessionLocal() as session:
             stmt = insert(ChannelConfig).values(
                 channel_id=channel_id,
                 guild_id=guild_id,
                 allow_read=allow_read if allow_read is not None else True,
                 allow_write=allow_write if allow_write is not None else True,
+                allow_save_images=allow_save_images if allow_save_images is not None else True,
                 cooldown=cooldown if cooldown is not None else config.DEFAULT_COOLDOWN
             )
             update_dict = {}
@@ -25,9 +26,10 @@ class PierceConfigService:
                 update_dict["allow_read"] = allow_read
             if allow_write is not None:
                 update_dict["allow_write"] = allow_write
+            if allow_save_images is not None:
+                update_dict["allow_save_images"] = allow_save_images
             if cooldown is not None:
                 update_dict["cooldown"] = cooldown
-
             if update_dict:
                 stmt = stmt.on_conflict_do_update(index_elements=["channel_id"], set_=update_dict)
             await session.execute(stmt)
@@ -43,9 +45,7 @@ class PierceConfigService:
                 )
                 await session.execute(delete_stmt)
                 await session.commit()
-
-            await interaction.edit_original_response(content="✅ History has been synced!")
-
+            await interaction.edit_original_response(content="✅ History sync started!")
             batch = []
             for channel in guild.text_channels:
                 perms = channel.permissions_for(guild.me)
@@ -72,12 +72,10 @@ class PierceConfigService:
                             await asyncio.sleep(0.1)
                 except discord.Forbidden:
                     continue
-
             if batch:
                 async with AsyncSessionLocal() as session:
                     stmt = insert(Message).values(batch).on_conflict_do_nothing(index_elements=["id"])
                     await session.execute(stmt)
                     await session.commit()
-
         except Exception as e:
             logger.error(f"Error during background sync: {e}")

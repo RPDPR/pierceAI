@@ -10,5 +10,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://bot_user:bot_pass
 TRIGGER_WORD = "g.p"
 DEFAULT_COOLDOWN = 3.0
 
+# Directory to get a font for use
+FONT_PATH = "assets/fonts/Impact.ttf"
 # Directory to save user-contributed pool images
-IMAGE_POOL_DIR = "src/assets/pool/"
+IMAGE_POOL_DIR = "assets/pool/"

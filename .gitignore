@@ -1,4 +1,4 @@
-src/assets/pool/
+assets/pool/
 .env
 __pycache__/
 *.py[cod]
