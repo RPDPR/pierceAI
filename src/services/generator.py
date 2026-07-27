@@ -37,6 +37,7 @@ class PierceGeneratorService:
 
         target_messages = messages
         if is_meme:
+            import re
             cleaned_messages = []
             for msg in messages:
                 cleaned = msg.strip()
@@ -44,7 +45,7 @@ class PierceGeneratorService:
                     continue
                 if ".com" in cleaned or ".ru" in cleaned or ".pl" in cleaned or ".net" in cleaned or ".org" in cleaned:
                     continue
-                if cleaned.startswith("<@") and cleaned.endswith(">"):
+                if re.search(r'<@&?\d+>', cleaned) or re.search(r'<#\d+>', cleaned) or re.search(r'<:\w+:\d+>', cleaned):
                     continue
                 cleaned_messages.append(cleaned)
             target_messages = cleaned_messages
