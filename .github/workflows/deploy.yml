@@ -23,12 +23,12 @@ jobs:
             cd /app/pierceAI
 
             if [ ! -d ".git" ]; then
-              git clone -b prod https://github.com .
+              git clone -b prod https://github.com/RPDPR/pierceAI .
             fi
 
             git fetch --all
             git reset --hard origin/prod
 
             docker compose up --build -d
-            
+
             docker image prune -f
