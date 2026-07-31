@@ -31,6 +31,6 @@ jobs:
             git fetch --all
             git reset --hard origin/prod
 
-            docker compose up -d --build
+            docker compose up --build -d
 
             docker image prune -f
