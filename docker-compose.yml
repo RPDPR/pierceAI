@@ -6,13 +6,13 @@ services:
     container_name: pierceai_db
     restart: always
     environment:
-      POSTGRES_USER: bot_user
-      POSTGRES_PASSWORD: bot_password_123
-      POSTGRES_DB: pierceai_bot_db
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"
 
   app:
     build:
