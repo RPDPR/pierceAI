@@ -1,0 +1,34 @@
+name: Deploy pierceAI Bot
+
+on:
+  push:
+    branches:
+      - prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Executing remote SSH commands to deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /app/pierceAI
+
+            if [ ! -d ".git" ]; then
+              git clone -b prod https://github.com .
+            fi
+
+            git fetch --all
+            git reset --hard origin/prod
+
+            docker compose up --build -d
+            
+            docker image prune -f
