@@ -64,6 +64,7 @@ class Commands(commands.Cog):
                         guild_pool_dir = os.path.join(config.IMAGE_POOL_DIR, str(message.guild.id))
                         os.makedirs(guild_pool_dir, exist_ok=True)
                         file_path = os.path.join(guild_pool_dir, filename)
+
                         async with aiohttp.ClientSession() as web_session:
                             async with web_session.get(attachment.url) as response:
                                 if response.status == 200:
@@ -78,11 +79,14 @@ class Commands(commands.Cog):
             cooldown_seconds = self._cooldown_cache.get(message.channel.id, config.DEFAULT_COOLDOWN)
             if now - last_time < cooldown_seconds:
                 return
+
             self._is_processing[message.channel.id] = True
             self._last_triggered[message.channel.id] = now
+
             if not await self._is_write_allowed(message.channel.id):
                 self._is_processing[message.channel.id] = False
                 return
+
             try:
                 async with message.channel.typing():
                     avatar_bytes = await message.author.display_avatar.read()
@@ -93,17 +97,23 @@ class Commands(commands.Cog):
                 self._is_processing[message.channel.id] = False
             return
 
+        is_bot_pinged = self.bot.user in message.mentions
+        is_bot_replied = False
+
         if message.reference and message.reference.message_id:
             try:
                 referenced_msg = message.reference.cached_message or await message.channel.fetch_message(message.reference.message_id)
                 if referenced_msg and referenced_msg.author == self.bot.user:
-                    if not await self._is_write_allowed(message.channel.id):
-                        return
-                    async with message.channel.typing():
-                        generated_text = await PierceGeneratorService.get_text_for_reply(message.guild.id)
-                        await message.reply(content=generated_text)
+                    is_bot_replied = True
             except discord.HTTPException:
                 pass
+
+        if is_bot_pinged or is_bot_replied:
+            if not await self._is_write_allowed(message.channel.id):
+                return
+            async with message.channel.typing():
+                generated_text = await PierceGeneratorService.get_text_for_reply(message.guild.id)
+                await message.reply(content=generated_text)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Commands(bot))
