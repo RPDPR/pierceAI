@@ -20,7 +20,7 @@ class PierceGeneratorService:
         bottom_raw: str
     ) -> BytesIO:
 
-        if pool_images and random.random() < 0.4:
+        if pool_images and random.random() < 0.6:
             bg_path = os.path.join(guild_pool_dir, random.choice(pool_images))
             base_img = Image.open(bg_path).convert("RGB")
         else:
